@@ -121,7 +121,7 @@ func (t *Textinput) Update(msg tea.Msg) (*Textinput, tea.Cmd) {
 			}
 			head, c, tail := t.HeadAndTail()
 			if len(filtered) > 0 {
-				t.Text = head + c + string(filtered) + tail
+				t.Text = head + string(filtered) + c + tail
 				t.pos += len(string(filtered))
 			}
 			return t, nil

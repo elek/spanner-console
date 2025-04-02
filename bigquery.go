@@ -1,9 +1,10 @@
 package main
 
 import (
-	"context"
 	"cloud.google.com/go/bigquery"
+	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"google.golang.org/api/iterator"
@@ -21,7 +22,7 @@ func NewBigQueryClient(ctx context.Context, projectID string) (*BigQueryClient, 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &BigQueryClient{
 		client: client,
 		name:   projectID,
@@ -31,13 +32,13 @@ func NewBigQueryClient(ctx context.Context, projectID string) (*BigQueryClient, 
 func (b *BigQueryClient) Execute(ctx context.Context, query string) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	
+
 	q := b.client.Query(query)
 	it, err := q.Read(ctx)
 	if err != nil {
 		return err
 	}
-	
+
 	// Print headers
 	schema := it.Schema
 	var header table.Row
@@ -45,25 +46,25 @@ func (b *BigQueryClient) Execute(ctx context.Context, query string) error {
 		header = append(header, field.Name)
 	}
 	t.AppendHeader(header)
-	
+
 	// Print rows
 	for {
 		var row []bigquery.Value
 		err := it.Next(&row)
-		if err == iterator.Done {
+		if errors.Is(err, iterator.Done) {
 			break
 		}
 		if err != nil {
 			return err
 		}
-		
+
 		var tableRow table.Row
 		for i, val := range row {
 			tableRow = append(tableRow, formatBigQueryValue(val, schema[i].Type))
 		}
 		t.AppendRow(tableRow)
 	}
-	
+
 	t.Render()
 	fmt.Println()
 	return nil
@@ -73,7 +74,7 @@ func formatBigQueryValue(val interface{}, fieldType bigquery.FieldType) interfac
 	if val == nil {
 		return "nil"
 	}
-	
+
 	switch fieldType {
 	case bigquery.StringFieldType:
 		return val
@@ -86,7 +87,7 @@ func formatBigQueryValue(val interface{}, fieldType bigquery.FieldType) interfac
 			return t.Format(time.RFC3339)
 		}
 	}
-	
+
 	return val
 }
 

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -18,7 +20,7 @@ func Loop(prompt string, f func(string), db DatabaseClient) error {
 		if query == "exit" {
 			return nil
 		}
-		
+
 		// Handle special commands
 		if query == "\\dt" {
 			err := db.ListTables(context.Background())

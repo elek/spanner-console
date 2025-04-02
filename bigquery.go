@@ -112,13 +112,13 @@ func (b *BigQueryClient) GetName() string {
 func (b *BigQueryClient) ListTables(ctx context.Context) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	
+
 	// Set up header
 	t.AppendHeader(table.Row{"Dataset", "Table Name"})
-	
+
 	// List all datasets
 	datasets := b.client.Datasets(ctx)
-	
+
 	for {
 		dataset, err := datasets.Next()
 		if err == iterator.Done {
@@ -127,23 +127,23 @@ func (b *BigQueryClient) ListTables(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		
+
 		// List all tables in the dataset
 		tables := dataset.Tables(ctx)
-		
+
 		for {
-			table, err := tables.Next()
+			tbl, err := tables.Next()
 			if err == iterator.Done {
 				break
 			}
 			if err != nil {
 				return err
 			}
-			
-			t.AppendRow(table.Row{dataset.DatasetID, table.TableID})
+
+			t.AppendRow(table.Row{dataset.DatasetID, tbl.TableID})
 		}
 	}
-	
+
 	t.Render()
 	fmt.Println()
 	return nil

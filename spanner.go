@@ -5,8 +5,10 @@ import (
 	"cloud.google.com/go/spanner/apiv1/spannerpb"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"github.com/jedib0t/go-pretty/v6/table"
+	"google.golang.org/api/iterator"
 	"os"
 	"time"
 )
@@ -25,7 +27,7 @@ func NewSpannerClient(ctx context.Context, connectionString string, prompt strin
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &SpannerClient{
 		client: client,
 		name:   prompt,
@@ -47,10 +49,10 @@ func (s *SpannerClient) GetName() string {
 func (s *SpannerClient) ListTables(ctx context.Context) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	
+
 	// Set up header
 	t.AppendHeader(table.Row{"Table Name"})
-	
+
 	// Query for all tables in the database
 	stmt := spanner.Statement{
 		SQL: `SELECT table_name 
@@ -58,27 +60,27 @@ func (s *SpannerClient) ListTables(ctx context.Context) error {
 		      WHERE table_catalog = '' AND table_schema = '' 
 		      ORDER BY table_name`,
 	}
-	
+
 	iter := s.client.Single().Query(ctx, stmt)
 	defer iter.Stop()
-	
+
 	for {
 		row, err := iter.Next()
-		if err == iterator.Done {
+		if errors.Is(err, iterator.Done) {
 			break
 		}
 		if err != nil {
 			return err
 		}
-		
+
 		var tableName string
 		if err := row.Columns(&tableName); err != nil {
 			return err
 		}
-		
+
 		t.AppendRow(table.Row{tableName})
 	}
-	
+
 	t.Render()
 	fmt.Println()
 	return nil

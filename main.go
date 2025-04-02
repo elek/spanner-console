@@ -27,14 +27,14 @@ type Cli struct {
 func (c *Cli) Run() error {
 	// Set up appropriate client based on which flag was provided
 	ctx := context.Background()
-	
+
 	var dbClient DatabaseClient
 	var err error
-	
+
 	if c.SpannerInstance != "" && c.BigQueryProject != "" {
 		return errors.New("Cannot specify both --spanner and --bigquery")
 	}
-	
+
 	if c.SpannerInstance != "" {
 		// Handle Spanner connection string formatting
 		parts := strings.Split(c.SpannerInstance, "/")
@@ -49,18 +49,18 @@ func (c *Cli) Run() error {
 		} else {
 			return errors.New(fmt.Sprintf("Invalid Spanner instance: %s", c.SpannerInstance))
 		}
-		
+
 		dbClient, err = NewSpannerClient(ctx, c.SpannerInstance, prompt)
 	} else if c.BigQueryProject != "" {
 		dbClient, err = NewBigQueryClient(ctx, c.BigQueryProject)
 	} else {
 		return errors.New("Either --spanner or --bigquery must be specified")
 	}
-	
+
 	if err != nil {
 		log.Fatalf("Failed to create database client: %v", err)
 	}
-	
+
 	defer dbClient.Close()
 
 	stat, _ := os.Stdin.Stat()
@@ -82,11 +82,11 @@ func (c *Cli) Run() error {
 		}
 		return nil
 	}
-	
+
 	return Loop(dbClient.GetName(), func(query string) {
 		err := dbClient.Execute(ctx, query)
 		if err != nil {
 			fmt.Printf("Failed to execute query: %v\n", err)
 		}
-	})
+	}, dbClient)
 }

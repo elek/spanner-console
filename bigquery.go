@@ -98,3 +98,7 @@ func (b *BigQueryClient) Close() {
 func (b *BigQueryClient) GetName() string {
 	return b.name
 }
+
+func (b *BigQueryClient) GetName() string {
+	return b.name
+}

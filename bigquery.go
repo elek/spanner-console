@@ -40,12 +40,7 @@ func (b *BigQueryClient) Execute(ctx context.Context, query string) error {
 	}
 
 	// Print headers
-	schema := it.Schema
-	var header table.Row
-	for _, field := range schema {
-		header = append(header, field.Name)
-	}
-	t.AppendHeader(header)
+	var schema bigquery.Schema
 
 	// Print rows
 	for {
@@ -56,6 +51,15 @@ func (b *BigQueryClient) Execute(ctx context.Context, query string) error {
 		}
 		if err != nil {
 			return err
+		}
+
+		if len(schema) == 0 {
+			schema = it.Schema
+			var header table.Row
+			for _, field := range schema {
+				header = append(header, field.Name)
+			}
+			t.AppendHeader(header)
 		}
 
 		var tableRow table.Row

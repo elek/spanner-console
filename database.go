@@ -14,4 +14,7 @@ type DatabaseClient interface {
 	
 	// GetName returns a descriptive name for the connection
 	GetName() string
+	
+	// ListTables lists all tables in the database
+	ListTables(ctx context.Context) error
 }

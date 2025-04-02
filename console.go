@@ -5,7 +5,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func Loop(prompt string, f func(string)) error {
+func Loop(prompt string, f func(string), db DatabaseClient) error {
 	var history []string
 	for {
 		query, stop, err := GetInput(prompt, history)
@@ -18,8 +18,17 @@ func Loop(prompt string, f func(string)) error {
 		if query == "exit" {
 			return nil
 		}
-		history = append(history, query)
-		f(query)
+		
+		// Handle special commands
+		if query == "\\dt" {
+			err := db.ListTables(context.Background())
+			if err != nil {
+				fmt.Printf("Error listing tables: %v\n", err)
+			}
+		} else {
+			history = append(history, query)
+			f(query)
+		}
 	}
 }
 

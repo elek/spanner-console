@@ -44,6 +44,46 @@ func (s *SpannerClient) GetName() string {
 	return s.name
 }
 
+func (s *SpannerClient) ListTables(ctx context.Context) error {
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	
+	// Set up header
+	t.AppendHeader(table.Row{"Table Name"})
+	
+	// Query for all tables in the database
+	stmt := spanner.Statement{
+		SQL: `SELECT table_name 
+		      FROM information_schema.tables 
+		      WHERE table_catalog = '' AND table_schema = '' 
+		      ORDER BY table_name`,
+	}
+	
+	iter := s.client.Single().Query(ctx, stmt)
+	defer iter.Stop()
+	
+	for {
+		row, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		
+		var tableName string
+		if err := row.Columns(&tableName); err != nil {
+			return err
+		}
+		
+		t.AppendRow(table.Row{tableName})
+	}
+	
+	t.Render()
+	fmt.Println()
+	return nil
+}
+
 func Execute(ctx context.Context, client *spanner.Client, query string) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)

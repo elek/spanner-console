@@ -11,6 +11,39 @@ import (
 	"time"
 )
 
+type SpannerClient struct {
+	client *spanner.Client
+	name   string
+}
+
+func NewSpannerClient(ctx context.Context, connectionString string, prompt string) (*SpannerClient, error) {
+	client, err := spanner.NewClientWithConfig(ctx, connectionString, spanner.ClientConfig{
+		SessionPoolConfig:    spanner.DefaultSessionPoolConfig,
+		SessionLabels:        map[string]string{"application_name": "spanner-console"},
+		DisableRouteToLeader: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+	
+	return &SpannerClient{
+		client: client,
+		name:   prompt,
+	}, nil
+}
+
+func (s *SpannerClient) Execute(ctx context.Context, query string) error {
+	return Execute(ctx, s.client, query)
+}
+
+func (s *SpannerClient) Close() {
+	s.client.Close()
+}
+
+func (s *SpannerClient) GetName() string {
+	return s.name
+}
+
 func Execute(ctx context.Context, client *spanner.Client, query string) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)

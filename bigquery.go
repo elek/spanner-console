@@ -60,7 +60,13 @@ func (b *BigQueryClient) Execute(ctx context.Context, query string) error {
 
 		var tableRow table.Row
 		for i, val := range row {
-			tableRow = append(tableRow, formatBigQueryValue(val, schema[i].Type))
+			// Check if schema has enough elements to avoid index out of range
+			if i < len(schema) {
+				tableRow = append(tableRow, formatBigQueryValue(val, schema[i].Type))
+			} else {
+				// If schema doesn't have enough elements, just format as string
+				tableRow = append(tableRow, fmt.Sprintf("%v", val))
+			}
 		}
 		t.AppendRow(tableRow)
 	}
@@ -93,10 +99,6 @@ func formatBigQueryValue(val interface{}, fieldType bigquery.FieldType) interfac
 
 func (b *BigQueryClient) Close() {
 	b.client.Close()
-}
-
-func (b *BigQueryClient) GetName() string {
-	return b.name
 }
 
 func (b *BigQueryClient) GetName() string {

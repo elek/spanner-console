@@ -17,6 +17,18 @@ type BigQueryClient struct {
 	name   string
 }
 
+func (b *BigQueryClient) ExecuteInTx(ctx context.Context, queries []string) error {
+	for _, query := range queries {
+		err := b.Execute(ctx, query)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var _ DatabaseClient = (*BigQueryClient)(nil)
+
 func NewBigQueryClient(ctx context.Context, projectID string) (*BigQueryClient, error) {
 	client, err := bigquery.NewClient(ctx, projectID)
 	if err != nil {
@@ -121,7 +133,7 @@ func (b *BigQueryClient) ListTables(ctx context.Context) error {
 
 	for {
 		dataset, err := datasets.Next()
-		if err == iterator.Done {
+		if errors.Is(err, iterator.Done) {
 			break
 		}
 		if err != nil {
@@ -133,7 +145,7 @@ func (b *BigQueryClient) ListTables(ctx context.Context) error {
 
 		for {
 			tbl, err := tables.Next()
-			if err == iterator.Done {
+			if errors.Is(err, iterator.Done) {
 				break
 			}
 			if err != nil {

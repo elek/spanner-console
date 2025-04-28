@@ -5,7 +5,8 @@ import (
 	"cloud.google.com/go/spanner/apiv1/spannerpb"
 	"context"
 	"encoding/hex"
-	"errors"
+	"github.com/pkg/errors"
+
 	"fmt"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"google.golang.org/api/iterator"
@@ -14,9 +15,16 @@ import (
 )
 
 type SpannerClient struct {
-	client *spanner.Client
-	name   string
+	client      *spanner.Client
+	name        string
+	transaction *spanner.ReadWriteTransaction
 }
+
+func (s *SpannerClient) ExecuteInTx(ctx context.Context, queries []string) error {
+	return Execute(ctx, s.client, queries)
+}
+
+var _ DatabaseClient = (*SpannerClient)(nil)
 
 func NewSpannerClient(ctx context.Context, connectionString string, prompt string) (*SpannerClient, error) {
 	client, err := spanner.NewClientWithConfig(ctx, connectionString, spanner.ClientConfig{
@@ -35,7 +43,7 @@ func NewSpannerClient(ctx context.Context, connectionString string, prompt strin
 }
 
 func (s *SpannerClient) Execute(ctx context.Context, query string) error {
-	return Execute(ctx, s.client, query)
+	return Execute(ctx, s.client, []string{query})
 }
 
 func (s *SpannerClient) Close() {
@@ -86,27 +94,35 @@ func (s *SpannerClient) ListTables(ctx context.Context) error {
 	return nil
 }
 
-func Execute(ctx context.Context, client *spanner.Client, query string) error {
+func Execute(ctx context.Context, client *spanner.Client, queries []string) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 
 	var headerPrinted bool
 	_, err := client.ReadWriteTransaction(ctx, func(ctx context.Context, transaction *spanner.ReadWriteTransaction) error {
-		err := transaction.Query(ctx, spanner.Statement{
-			SQL: query,
-		}).Do(func(r *spanner.Row) error {
-			if !headerPrinted {
-				var header table.Row
-				for _, name := range r.ColumnNames() {
-					header = append(header, name)
-				}
-				t.AppendHeader(header)
-				headerPrinted = true
+		for _, query := range queries {
+			if query == "" {
+				continue
 			}
-			t.AppendRow(convertToRow(r))
-			return nil
-		})
-		return err
+			err := transaction.Query(ctx, spanner.Statement{
+				SQL: query,
+			}).Do(func(r *spanner.Row) error {
+				if !headerPrinted {
+					var header table.Row
+					for _, name := range r.ColumnNames() {
+						header = append(header, name)
+					}
+					t.AppendHeader(header)
+					headerPrinted = true
+				}
+				t.AppendRow(convertToRow(r))
+				return nil
+			})
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
+		return nil
 	})
 
 	t.Render()

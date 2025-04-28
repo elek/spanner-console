@@ -22,6 +22,7 @@ func main() {
 type Cli struct {
 	SpannerInstance string `name:"spanner" help:"Spanner instance, in the form of projects/{project}/instances/{instance}/databases/{database} or {project}/{instance}/{database}"`
 	BigQueryProject string `name:"bigquery" help:"BigQuery project ID"`
+	Transaction     bool   `name:"transaction" short:"t" help:"Execute all queries in a single transaction"`
 }
 
 func (c *Cli) Run() error {
@@ -64,6 +65,8 @@ func (c *Cli) Run() error {
 	defer dbClient.Close()
 
 	stat, _ := os.Stdin.Stat()
+
+	var queries []string
 	if (stat.Mode() & os.ModeCharDevice) == 0 {
 		content, err := io.ReadAll(os.Stdin)
 		if err != nil {
@@ -75,7 +78,17 @@ func (c *Cli) Run() error {
 				continue
 			}
 			fmt.Println(line)
-			err := dbClient.Execute(ctx, string(line))
+			if c.Transaction {
+				queries = append(queries, line)
+			} else {
+				err := dbClient.Execute(ctx, string(line))
+				if err != nil {
+					return errors.WithStack(err)
+				}
+			}
+		}
+		if len(queries) > 0 {
+			err := dbClient.ExecuteInTx(ctx, queries)
 			if err != nil {
 				return errors.WithStack(err)
 			}

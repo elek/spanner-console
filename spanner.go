@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/hex"
 	"github.com/pkg/errors"
+	"strings"
 
 	"fmt"
 	"google.golang.org/api/iterator"
@@ -16,15 +17,16 @@ type SpannerClient struct {
 	client      *spanner.Client
 	name        string
 	transaction *spanner.ReadWriteTransaction
+	staleness   time.Duration
 }
 
 func (s *SpannerClient) ExecuteInTx(ctx context.Context, queries []string) error {
-	return Execute(ctx, s.client, queries)
+	return Execute(ctx, s.client, queries, s.staleness)
 }
 
 var _ DatabaseClient = (*SpannerClient)(nil)
 
-func NewSpannerClient(ctx context.Context, connectionString string, prompt string) (*SpannerClient, error) {
+func NewSpannerClient(ctx context.Context, connectionString string, prompt string, staleness time.Duration) (*SpannerClient, error) {
 	client, err := spanner.NewClientWithConfig(ctx, connectionString, spanner.ClientConfig{
 		SessionPoolConfig:    spanner.DefaultSessionPoolConfig,
 		SessionLabels:        map[string]string{"application_name": "spanner-console"},
@@ -35,13 +37,14 @@ func NewSpannerClient(ctx context.Context, connectionString string, prompt strin
 	}
 
 	return &SpannerClient{
-		client: client,
-		name:   prompt,
+		client:    client,
+		name:      prompt,
+		staleness: staleness,
 	}, nil
 }
 
 func (s *SpannerClient) Execute(ctx context.Context, query string) error {
-	return Execute(ctx, s.client, []string{query})
+	return Execute(ctx, s.client, []string{query}, s.staleness)
 }
 
 func (s *SpannerClient) Close() {
@@ -50,6 +53,19 @@ func (s *SpannerClient) Close() {
 
 func (s *SpannerClient) GetName() string {
 	return s.name
+}
+
+// isReadOnlyQuery checks if all queries are read-only
+func isReadOnlyQuery(queries []string) bool {
+	for _, q := range queries {
+		q = strings.ToUpper(strings.TrimSpace(q))
+		if strings.HasPrefix(q, "INSERT") || strings.HasPrefix(q, "UPDATE") ||
+			strings.HasPrefix(q, "DELETE") || strings.HasPrefix(q, "CREATE") ||
+			strings.HasPrefix(q, "DROP") || strings.HasPrefix(q, "ALTER") {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *SpannerClient) ListTables(ctx context.Context) error {
@@ -66,7 +82,12 @@ func (s *SpannerClient) ListTables(ctx context.Context) error {
 		      ORDER BY table_name`,
 	}
 
-	iter := s.client.Single().Query(ctx, stmt)
+	// Use stale reads if staleness is set
+	singleUse := s.client.Single()
+	if s.staleness > 0 {
+		singleUse = singleUse.WithTimestampBound(spanner.ExactStaleness(s.staleness))
+	}
+	iter := singleUse.Query(ctx, stmt)
 	defer iter.Stop()
 
 	for {
@@ -91,10 +112,49 @@ func (s *SpannerClient) ListTables(ctx context.Context) error {
 	return nil
 }
 
-func Execute(ctx context.Context, client *spanner.Client, queries []string) error {
+func Execute(ctx context.Context, client *spanner.Client, queries []string, staleness time.Duration) error {
 	writer := GetResultWriter(outputFormat)
 
 	var headerPrinted bool
+
+	// If we have staleness set and only read queries, use stale reads
+	if isReadOnlyQuery(queries) {
+		// Create a read-only transaction with the staleness bound
+		ro := client.ReadOnlyTransaction()
+		if staleness > 0 {
+			ro = ro.WithTimestampBound(spanner.ExactStaleness(staleness))
+		}
+		defer ro.Close()
+
+		for _, query := range queries {
+			if query == "" {
+				continue
+			}
+			err := ro.Query(ctx, spanner.Statement{
+				SQL: query,
+			}).Do(func(r *spanner.Row) error {
+				if !headerPrinted {
+					var header []string
+					for _, name := range r.ColumnNames() {
+						header = append(header, name)
+					}
+					writer.SetHeader(header)
+					headerPrinted = true
+				}
+				writer.AppendRow(convertToRow(r))
+				return nil
+			})
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		writer.Render()
+		fmt.Println()
+		return nil
+	}
+
+	// For write transactions or no staleness, use read-write transaction
 	_, err := client.ReadWriteTransaction(ctx, func(ctx context.Context, transaction *spanner.ReadWriteTransaction) error {
 		for _, query := range queries {
 			if query == "" {

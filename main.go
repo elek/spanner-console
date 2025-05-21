@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -20,10 +21,11 @@ func main() {
 }
 
 type Cli struct {
-	SpannerInstance string `name:"spanner" help:"Spanner instance, in the form of projects/{project}/instances/{instance}/databases/{database} or {project}/{instance}/{database}"`
-	BigQueryProject string `name:"bigquery" help:"BigQuery project ID"`
-	Transaction     bool   `name:"transaction" short:"t" help:"Execute all queries in a single transaction"`
-	OutputFormat    string `name:"format" short:"f" help:"Output format (table|csv)" default:"table" enum:"table,csv"`
+	SpannerInstance string        `name:"spanner" help:"Spanner instance, in the form of projects/{project}/instances/{instance}/databases/{database} or {project}/{instance}/{database}"`
+	BigQueryProject string        `name:"bigquery" help:"BigQuery project ID"`
+	Transaction     bool          `name:"transaction" short:"t" help:"Execute all queries in a single transaction"`
+	OutputFormat    string        `name:"format" short:"f" help:"Output format (table|csv)" default:"table" enum:"table,csv"`
+	Staleness       time.Duration `name:"staleness" help:"Staleness duration for Spanner stale reads (e.g. 10s, 1m)"`
 }
 
 // Store outputFormat as a global variable for all DB clients to access
@@ -58,7 +60,7 @@ func (c *Cli) Run() error {
 			return errors.New(fmt.Sprintf("Invalid Spanner instance: %s", c.SpannerInstance))
 		}
 
-		dbClient, err = NewSpannerClient(ctx, c.SpannerInstance, prompt)
+		dbClient, err = NewSpannerClient(ctx, c.SpannerInstance, prompt, c.Staleness)
 	} else if c.BigQueryProject != "" {
 		dbClient, err = NewBigQueryClient(ctx, c.BigQueryProject)
 	} else {

@@ -28,6 +28,7 @@ Options:
 
 - `--format` or `-f`: Output format (table|csv), default is table
 - `--transaction` or `-t`: Execute all queries in a single transaction
+- `--staleness`: Staleness duration for Spanner stale reads (e.g. 10s, 1m)
 
 Example with CSV output:
 

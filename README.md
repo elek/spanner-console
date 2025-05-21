@@ -1,19 +1,36 @@
-Simple (and limited) SQL console for Google Spanner.
+Simple (and limited) SQL console for Google Spanner and BigQuery.
 
 Usage:
 
 ```
-spanner-console --db=my_proect/my_instance/my_db
+spanner-console --spanner=my_proect/my_instance/my_db
 ```
 
 or:
 
 ```
-spanner-console --db=projects/my_proect/instances/my_instance/databases/my_db
+spanner-console --spanner=projects/my_proect/instances/my_instance/databases/my_db
 ```
 
-or: 
+or:
 
 ```
-cat /tmp/foo.sql | spanner-console --db=...
+spanner-console --bigquery=my_project
+```
+
+You can also pipe SQL commands:
+
+```
+cat /tmp/foo.sql | spanner-console --spanner=...
+```
+
+Options:
+
+- `--format` or `-f`: Output format (table|csv), default is table
+- `--transaction` or `-t`: Execute all queries in a single transaction
+
+Example with CSV output:
+
+```
+spanner-console --spanner=my_project/my_instance/my_db --format=csv
 ```

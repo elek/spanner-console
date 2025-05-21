@@ -8,9 +8,7 @@ import (
 	"github.com/pkg/errors"
 
 	"fmt"
-	"github.com/jedib0t/go-pretty/v6/table"
 	"google.golang.org/api/iterator"
-	"os"
 	"time"
 )
 
@@ -55,11 +53,10 @@ func (s *SpannerClient) GetName() string {
 }
 
 func (s *SpannerClient) ListTables(ctx context.Context) error {
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
+	writer := GetResultWriter(outputFormat)
 
 	// Set up header
-	t.AppendHeader(table.Row{"Table Name"})
+	writer.SetHeader([]string{"Table Name"})
 
 	// Query for all tables in the database
 	stmt := spanner.Statement{
@@ -86,17 +83,16 @@ func (s *SpannerClient) ListTables(ctx context.Context) error {
 			return err
 		}
 
-		t.AppendRow(table.Row{tableName})
+		writer.AppendRow([]interface{}{tableName})
 	}
 
-	t.Render()
+	writer.Render()
 	fmt.Println()
 	return nil
 }
 
 func Execute(ctx context.Context, client *spanner.Client, queries []string) error {
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
+	writer := GetResultWriter(outputFormat)
 
 	var headerPrinted bool
 	_, err := client.ReadWriteTransaction(ctx, func(ctx context.Context, transaction *spanner.ReadWriteTransaction) error {
@@ -108,14 +104,14 @@ func Execute(ctx context.Context, client *spanner.Client, queries []string) erro
 				SQL: query,
 			}).Do(func(r *spanner.Row) error {
 				if !headerPrinted {
-					var header table.Row
+					var header []string
 					for _, name := range r.ColumnNames() {
 						header = append(header, name)
 					}
-					t.AppendHeader(header)
+					writer.SetHeader(header)
 					headerPrinted = true
 				}
-				t.AppendRow(convertToRow(r))
+				writer.AppendRow(convertToRow(r))
 				return nil
 			})
 			if err != nil {
@@ -125,13 +121,13 @@ func Execute(ctx context.Context, client *spanner.Client, queries []string) erro
 		return nil
 	})
 
-	t.Render()
+	writer.Render()
 	fmt.Println()
 	return err
 }
 
-func convertToRow(r *spanner.Row) table.Row {
-	var row table.Row
+func convertToRow(r *spanner.Row) []interface{} {
+	var row []interface{}
 
 	for ix := range r.Size() {
 

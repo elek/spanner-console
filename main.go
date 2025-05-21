@@ -23,11 +23,18 @@ type Cli struct {
 	SpannerInstance string `name:"spanner" help:"Spanner instance, in the form of projects/{project}/instances/{instance}/databases/{database} or {project}/{instance}/{database}"`
 	BigQueryProject string `name:"bigquery" help:"BigQuery project ID"`
 	Transaction     bool   `name:"transaction" short:"t" help:"Execute all queries in a single transaction"`
+	OutputFormat    string `name:"format" short:"f" help:"Output format (table|csv)" default:"table" enum:"table,csv"`
 }
+
+// Store outputFormat as a global variable for all DB clients to access
+var outputFormat string
 
 func (c *Cli) Run() error {
 	// Set up appropriate client based on which flag was provided
 	ctx := context.Background()
+	
+	// Set the global output format
+	outputFormat = c.OutputFormat
 
 	var dbClient DatabaseClient
 	var err error

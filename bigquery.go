@@ -6,9 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/jedib0t/go-pretty/v6/table"
 	"google.golang.org/api/iterator"
-	"os"
 	"time"
 )
 
@@ -42,8 +40,7 @@ func NewBigQueryClient(ctx context.Context, projectID string) (*BigQueryClient, 
 }
 
 func (b *BigQueryClient) Execute(ctx context.Context, query string) error {
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
+	writer := GetResultWriter(outputFormat)
 
 	q := b.client.Query(query)
 	it, err := q.Read(ctx)
@@ -67,14 +64,14 @@ func (b *BigQueryClient) Execute(ctx context.Context, query string) error {
 
 		if len(schema) == 0 {
 			schema = it.Schema
-			var header table.Row
+			var header []string
 			for _, field := range schema {
 				header = append(header, field.Name)
 			}
-			t.AppendHeader(header)
+			writer.SetHeader(header)
 		}
 
-		var tableRow table.Row
+		var tableRow []interface{}
 		for i, val := range row {
 			// Check if schema has enough elements to avoid index out of range
 			if i < len(schema) {
@@ -84,10 +81,10 @@ func (b *BigQueryClient) Execute(ctx context.Context, query string) error {
 				tableRow = append(tableRow, fmt.Sprintf("%v", val))
 			}
 		}
-		t.AppendRow(tableRow)
+		writer.AppendRow(tableRow)
 	}
 
-	t.Render()
+	writer.Render()
 	fmt.Println()
 	return nil
 }
@@ -122,11 +119,10 @@ func (b *BigQueryClient) GetName() string {
 }
 
 func (b *BigQueryClient) ListTables(ctx context.Context) error {
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
+	writer := GetResultWriter(outputFormat)
 
 	// Set up header
-	t.AppendHeader(table.Row{"Dataset", "Table Name"})
+	writer.SetHeader([]string{"Dataset", "Table Name"})
 
 	// List all datasets
 	datasets := b.client.Datasets(ctx)
@@ -152,11 +148,11 @@ func (b *BigQueryClient) ListTables(ctx context.Context) error {
 				return err
 			}
 
-			t.AppendRow(table.Row{dataset.DatasetID, tbl.TableID})
+			writer.AppendRow([]interface{}{dataset.DatasetID, tbl.TableID})
 		}
 	}
 
-	t.Render()
+	writer.Render()
 	fmt.Println()
 	return nil
 }

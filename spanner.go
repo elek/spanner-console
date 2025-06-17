@@ -14,19 +14,21 @@ import (
 )
 
 type SpannerClient struct {
-	client      *spanner.Client
-	name        string
-	transaction *spanner.ReadWriteTransaction
-	staleness   time.Duration
+	client           *spanner.Client
+	name             string
+	transaction      *spanner.ReadWriteTransaction
+	staleness        time.Duration
+	exactTimestamp   time.Time
+	useExactTimestamp bool
 }
 
 func (s *SpannerClient) ExecuteInTx(ctx context.Context, queries []string) error {
-	return Execute(ctx, s.client, queries, s.staleness)
+	return Execute(ctx, s.client, queries, s.staleness, s.exactTimestamp, s.useExactTimestamp)
 }
 
 var _ DatabaseClient = (*SpannerClient)(nil)
 
-func NewSpannerClient(ctx context.Context, connectionString string, prompt string, staleness time.Duration) (*SpannerClient, error) {
+func NewSpannerClient(ctx context.Context, connectionString string, prompt string, staleness time.Duration, exactTimestamp time.Time, useExactTimestamp bool) (*SpannerClient, error) {
 	client, err := spanner.NewClientWithConfig(ctx, connectionString, spanner.ClientConfig{
 		SessionPoolConfig:    spanner.DefaultSessionPoolConfig,
 		SessionLabels:        map[string]string{"application_name": "spanner-console"},
@@ -37,14 +39,16 @@ func NewSpannerClient(ctx context.Context, connectionString string, prompt strin
 	}
 
 	return &SpannerClient{
-		client:    client,
-		name:      prompt,
-		staleness: staleness,
+		client:           client,
+		name:             prompt,
+		staleness:        staleness,
+		exactTimestamp:   exactTimestamp,
+		useExactTimestamp: useExactTimestamp,
 	}, nil
 }
 
 func (s *SpannerClient) Execute(ctx context.Context, query string) error {
-	return Execute(ctx, s.client, []string{query}, s.staleness)
+	return Execute(ctx, s.client, []string{query}, s.staleness, s.exactTimestamp, s.useExactTimestamp)
 }
 
 func (s *SpannerClient) Close() {
@@ -84,7 +88,9 @@ func (s *SpannerClient) ListTables(ctx context.Context) error {
 
 	// Use stale reads if staleness is set
 	singleUse := s.client.Single()
-	if s.staleness > 0 {
+	if s.useExactTimestamp {
+		singleUse = singleUse.WithTimestampBound(spanner.ReadTimestamp(s.exactTimestamp))
+	} else if s.staleness > 0 {
 		singleUse = singleUse.WithTimestampBound(spanner.ExactStaleness(s.staleness))
 	}
 	iter := singleUse.Query(ctx, stmt)
@@ -112,7 +118,7 @@ func (s *SpannerClient) ListTables(ctx context.Context) error {
 	return nil
 }
 
-func Execute(ctx context.Context, client *spanner.Client, queries []string, staleness time.Duration) error {
+func Execute(ctx context.Context, client *spanner.Client, queries []string, staleness time.Duration, exactTimestamp time.Time, useExactTimestamp bool) error {
 	writer := GetResultWriter(outputFormat)
 
 	var headerPrinted bool
@@ -121,7 +127,9 @@ func Execute(ctx context.Context, client *spanner.Client, queries []string, stal
 	if isReadOnlyQuery(queries) {
 		// Create a read-only transaction with the staleness bound
 		ro := client.ReadOnlyTransaction()
-		if staleness > 0 {
+		if useExactTimestamp {
+			ro = ro.WithTimestampBound(spanner.ReadTimestamp(exactTimestamp))
+		} else if staleness > 0 {
 			ro = ro.WithTimestampBound(spanner.ExactStaleness(staleness))
 		}
 		defer ro.Close()

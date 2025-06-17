@@ -26,6 +26,7 @@ type Cli struct {
 	Transaction     bool          `name:"transaction" short:"t" help:"Execute all queries in a single transaction"`
 	OutputFormat    string        `name:"format" short:"f" help:"Output format (table|csv)" default:"table" enum:"table,csv"`
 	Staleness       time.Duration `name:"staleness" help:"Staleness duration for Spanner stale reads (e.g. 10s, 1m)"`
+	ExactTimestamp  string        `name:"exact-timestamp" help:"Exact timestamp for Spanner stale reads (RFC3339 format, e.g. 2006-01-02T15:04:05Z)"`
 }
 
 // Store outputFormat as a global variable for all DB clients to access
@@ -60,7 +61,24 @@ func (c *Cli) Run() error {
 			return errors.New(fmt.Sprintf("Invalid Spanner instance: %s", c.SpannerInstance))
 		}
 
-		dbClient, err = NewSpannerClient(ctx, c.SpannerInstance, prompt, c.Staleness)
+		// Check if both staleness and exact-timestamp are provided
+		if c.Staleness > 0 && c.ExactTimestamp != "" {
+			return errors.New("Cannot specify both --staleness and --exact-timestamp")
+		}
+		
+		var exactTimestamp time.Time
+		var useExactTimestamp bool
+		
+		if c.ExactTimestamp != "" {
+			var err error
+			exactTimestamp, err = time.Parse(time.RFC3339, c.ExactTimestamp)
+			if err != nil {
+				return errors.Wrap(err, "Invalid exact timestamp format. Please use RFC3339 format (e.g. 2006-01-02T15:04:05Z)")
+			}
+			useExactTimestamp = true
+		}
+		
+		dbClient, err = NewSpannerClient(ctx, c.SpannerInstance, prompt, c.Staleness, exactTimestamp, useExactTimestamp)
 	} else if c.BigQueryProject != "" {
 		dbClient, err = NewBigQueryClient(ctx, c.BigQueryProject)
 	} else {

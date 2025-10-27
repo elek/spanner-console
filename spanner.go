@@ -1,24 +1,26 @@
 package main
 
 import (
-	"cloud.google.com/go/spanner"
-	"cloud.google.com/go/spanner/apiv1/spannerpb"
 	"context"
 	"encoding/hex"
-	"github.com/pkg/errors"
 	"strings"
 
+	"cloud.google.com/go/spanner"
+	"cloud.google.com/go/spanner/apiv1/spannerpb"
+	"github.com/pkg/errors"
+
 	"fmt"
-	"google.golang.org/api/iterator"
 	"time"
+
+	"google.golang.org/api/iterator"
 )
 
 type SpannerClient struct {
-	client           *spanner.Client
-	name             string
-	transaction      *spanner.ReadWriteTransaction
-	staleness        time.Duration
-	exactTimestamp   time.Time
+	client            *spanner.Client
+	name              string
+	transaction       *spanner.ReadWriteTransaction
+	staleness         time.Duration
+	exactTimestamp    time.Time
 	useExactTimestamp bool
 }
 
@@ -39,10 +41,10 @@ func NewSpannerClient(ctx context.Context, connectionString string, prompt strin
 	}
 
 	return &SpannerClient{
-		client:           client,
-		name:             prompt,
-		staleness:        staleness,
-		exactTimestamp:   exactTimestamp,
+		client:            client,
+		name:              prompt,
+		staleness:         staleness,
+		exactTimestamp:    exactTimestamp,
 		useExactTimestamp: useExactTimestamp,
 	}, nil
 }
@@ -231,6 +233,28 @@ func convertToRow(r *spanner.Row) []interface{} {
 				row = append(row, *v)
 			}
 
+		case spannerpb.TypeCode_FLOAT64:
+			var v *float64
+			err := r.Column(ix, &v)
+			if err != nil {
+				row = append(row, err.Error())
+			}
+			if v == nil {
+				row = append(row, "nil")
+			} else {
+				row = append(row, *v)
+			}
+		case spannerpb.TypeCode_FLOAT32:
+			var v *float32
+			err := r.Column(ix, &v)
+			if err != nil {
+				row = append(row, err.Error())
+			}
+			if v == nil {
+				row = append(row, "nil")
+			} else {
+				row = append(row, *v)
+			}
 		case spannerpb.TypeCode_BYTES:
 			var v []byte
 			err := r.Column(ix, &v)

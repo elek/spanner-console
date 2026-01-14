@@ -65,7 +65,7 @@ func (s *SpannerClient) GetName() string {
 func isReadOnlyQuery(queries []string) bool {
 	for _, q := range queries {
 		q = strings.ToUpper(strings.TrimSpace(q))
-		q = removeComments(q)
+		q = strings.TrimSpace(removeComments(q))
 		if strings.HasPrefix(q, "INSERT") || strings.HasPrefix(q, "UPDATE") ||
 			strings.HasPrefix(q, "DELETE") || strings.HasPrefix(q, "CREATE") ||
 			strings.HasPrefix(q, "DROP") || strings.HasPrefix(q, "ALTER") {

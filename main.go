@@ -1,15 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
-	"github.com/alecthomas/kong"
-	"github.com/pkg/errors"
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/alecthomas/kong"
+	"github.com/pkg/errors"
 )
 
 func main() {
@@ -21,6 +24,7 @@ func main() {
 }
 
 type Cli struct {
+	Alias           string        `arg:"" optional:"" help:"Alias name from ~/.config/spanner-console/alias"`
 	SpannerInstance string        `name:"spanner" help:"Spanner instance, in the form of projects/{project}/instances/{instance}/databases/{database} or {project}/{instance}/{database}"`
 	BigQueryProject string        `name:"bigquery" help:"BigQuery project ID"`
 	Transaction     bool          `name:"transaction" short:"t" help:"Execute all queries in a single transaction"`
@@ -32,12 +36,65 @@ type Cli struct {
 // Store outputFormat as a global variable for all DB clients to access
 var outputFormat string
 
+// resolveAlias looks up an alias in ~/.config/spanner-console/alias
+// Returns (type, connection-string, error)
+func resolveAlias(alias string) (string, string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to get home directory")
+	}
+
+	aliasPath := filepath.Join(home, ".config", "spanner-console", "alias")
+	file, err := os.Open(aliasPath)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to open alias file")
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.Fields(line)
+		if len(parts) >= 3 && parts[0] == alias {
+			return parts[1], parts[2], nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return "", "", errors.Wrap(err, "failed to read alias file")
+	}
+
+	return "", "", errors.Errorf("alias %q not found", alias)
+}
+
 func (c *Cli) Run() error {
 	// Set up appropriate client based on which flag was provided
 	ctx := context.Background()
 	
 	// Set the global output format
 	outputFormat = c.OutputFormat
+
+	// Resolve alias if provided
+	if c.Alias != "" {
+		if c.SpannerInstance != "" || c.BigQueryProject != "" {
+			return errors.New("Cannot specify both alias and --spanner/--bigquery flags")
+		}
+		dbType, connStr, err := resolveAlias(c.Alias)
+		if err != nil {
+			return err
+		}
+		switch dbType {
+		case "spanner":
+			c.SpannerInstance = connStr
+		case "bigquery":
+			c.BigQueryProject = connStr
+		default:
+			return errors.Errorf("unknown database type %q for alias %q", dbType, c.Alias)
+		}
+	}
 
 	var dbClient DatabaseClient
 	var err error
